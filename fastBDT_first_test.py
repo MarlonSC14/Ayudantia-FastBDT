@@ -68,7 +68,7 @@ classifier.fit(X=dataFrame[cols],
 
 #Geting the probabilities of each event to be signal and calculating weights
 predict = classifier.predict(mc_df[cols])
-fastW = (1-predict)/predict
+fastW = predict/(1-predict)
 
 # weight_mean, weight_std = np.mean(fastW), np.std(fastW)
 # large_fastW = np.abs(fastW-weight_mean)>10*weight_std
@@ -83,31 +83,42 @@ for variable in cols:
         #n_mc, bins_mc = plt.hist(mc_df[variable], bins=100, density=True, label='MC')
         histo_rd_sw = plt.hist(rd_df[variable], bins=100, density=True, label='Data', weights=rd_df['sweights'])
         histo_sf = plt.hist(mc_df[variable], bins=100, density=True, histtype='step', linewidth=2,label='MC ScaleFactor', weights=SF)
-        histo_w = plt.hist(mc_df[variable], bins=100, density=True, histtype='step', linewidth=2, label='MC reweighted', weights=SF+fastW)
+        histo_w = plt.hist(mc_df[variable], bins=100, density=True, histtype='step', linewidth=2, label='MC reweighted', weights=SF*fastW)
+        plt.close()
+        fig = plt.figure(figsize=[14,12])
+        axes = plot_tools_simple.create_axes_for_pulls(fig)
+        real=rd_df[variable]
+        on_p = np.percentile(real, 1)
+        ni_p = np.percentile(real, 99)
+        histo_raw = plot_tools_simple.hist_weighted(mc_df[variable], range=[on_p, ni_p], weights=SF, bins=100, marker='o', axis=axes[0], density=True, color='orangered', label='MC')
+        histo_final = plot_tools_simple.hist_weighted(mc_df[variable], weights=SF+fastW, bins=100, marker='o', axis=axes[0], density=True, color='seagreen', label='Reweighted MC')
+        histo_data = plot_tools_simple.hist_weighted(real, weights=rd_df['sweights'], bins=100, marker='s', axis=axes[0], density=True, color='blue', label='Data sWeight', markersize=7.5)
+        plt.close(fig)
+        chi2_raw = get_chi2_mod(histo_raw,histo_data)
+        chi2_final = get_chi2_mod(histo_final,histo_data)
+        label_chi2_final = str(round(chi2_final, 1))
+        label_chi2_final = str(round(chi2_final/(len(histo_data[0])-1), 1))
+        label_chi2_raw = str(round(chi2_raw, 1))
+        label_chi2_raw = str(round(chi2_raw/(len(histo_data[0])-1), 1))
+        print("Horacio's implementation:")
+        print(f'Original {variable}: {label_chi2_raw}')
+        print(f'Reweighted {variable}: {label_chi2_final}')
+        #plt.text(x=plt.xlim()[0]+0.05,y=plt.ylim()[1]-0.05, s=f'Raw X2={chi2_or} \n Reweight X2={chi2_w}')
+        plt.hist(rd_df[variable], bins=100, density=True, label='Data', weights=rd_df['sweights'])
+        plt.hist(mc_df[variable], bins=100, density=True, histtype='step', linewidth=2,label='MC ScaleFactor', weights=SF)
+        plt.hist(mc_df[variable], bins=100, density=True, histtype='step', linewidth=2, label='MC reweighted', weights=SF*fastW)
         plt.title(f'{variable}')
         plt.legend(frameon=True)
-        plt.savefig(f'hsto_{variable}.png')
-        n_mc_sf_root = len(histo_sf[0])-1
-        n_rd_sw_root = len(histo_rd_sw[0])-1
-        n_mc_w_root = len(histo_w[0])-1
-        root_h_mc_sf = ROOT.TH1F(f"root_h_mc_sf_{variable}", f"ROOT_1_{variable}", n_mc_sf_root, histo_sf[1][0], histo_sf[1][-1])
-        root_h_rd_sw = ROOT.TH1F(f"root_h_rd_sw_{variable}", f"ROOT_2_{variable}", n_rd_sw_root, histo_rd_sw[1][0], histo_rd_sw[1][-1])
-        root_h_mc_w = ROOT.TH1F(f"root_h_mc_w_{variable}", f"ROOT_3_{variable}", n_mc_w_root, histo_w[1][0], histo_w[1][-1])
-        for i in range(n_mc_sf_root):
-                root_h_mc_sf.SetBinContent(i+1, histo_sf[0][i])
-        for i in range(n_rd_sw_root):
-                root_h_rd_sw.SetBinContent(i+1, histo_rd_sw[0][i])
-        for i in range(n_mc_w_root):
-                root_h_mc_w.SetBinContent(i+1, histo_w[1][i])
-        chi2_or = root_h_mc_sf.Chi2Test(root_h_rd_sw, option="UU")
-        chi2_w = root_h_rd_sw.Chi2Test(root_h_mc_w, option="UW")
-        print("ROOT chi2:")
-        print(f'Original {variable}: {chi2_or}')
-        print(f'Reweighted {variable}: {chi2_w}')
-        # chi2_raw = get_chi2_mod(histo_sf,histo_rd_sw)
-        # chi2_final = get_chi2_mod(histo_w,histo_rd_sw)
-        # print("Horacio's implementation:")
-        # print(f'Original {variable}: {chi2_raw}')
-        # print(f'Reweighted {variable}: {chi2_final}')
-        # plt.text(x=plt.xlim()[0]+0.05,y=plt.ylim()[1]-0.05, s=f'Raw X2={chi2_or} \n Reweight X2={chi2_w}')
+        if variable == 'cosA':
+               for i in range(len(histo_rd_sw[0])):
+                     plt.yscale('log')
+                     break
+        elif variable != 'fit_eta' and variable != 'prob':
+               for i in range(len(histo_rd_sw[0])):
+                      if histo_rd_sw[0][i]<0.01*max(histo_rd_sw[0]):
+                             plt.xlim(min(rd_df[variable]),max(rd_df[variable])*i/100)
+                             break
+        plt.text(x=min(rd_df[variable]),y=0,s=f'X2_or={label_chi2_raw} \n X2_w={label_chi2_final}')
+        plt.legend(frameon=True)
+        plt.savefig(f'histo_{variable}.png')
         plt.show()
